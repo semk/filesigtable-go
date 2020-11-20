@@ -27,8 +27,15 @@ func main() {
 		log.Fatalln("Couldn't open the signature file", err)
 	}
 
+	type templateData struct {
+		Sigs      []*sigtable.FileSignature
+		SigsByExt map[string][]*sigtable.FileSignature
+	}
+
 	var sigs []*sigtable.FileSignature
+	sigsByExt := make(map[string][]*sigtable.FileSignature)
 	r := csv.NewReader(csvFile)
+
 	for {
 		// Read each record from csv
 		record, err := r.Read()
@@ -50,9 +57,13 @@ func main() {
 		if err != nil {
 			log.Fatalln("Couldn't parse the file signature", err)
 		}
+		for _, ext := range s.Extensions {
+			sigsByExt[ext] = append(sigsByExt[ext], s)
+		}
 		sigs = append(sigs, s)
 	}
 
+	tmplData := &templateData{Sigs: sigs, SigsByExt: sigsByExt}
 	sigTmpl, err := template.New("signatures.gotmpl").ParseFiles("signatures.gotmpl")
 	if err != nil {
 		log.Fatalln("Couldn't parse the template file", err)
@@ -64,7 +75,7 @@ func main() {
 	}
 	defer out.Close()
 
-	err = sigTmpl.Execute(out, sigs)
+	err = sigTmpl.Execute(out, tmplData)
 	if err != nil {
 		log.Fatal(err)
 	}

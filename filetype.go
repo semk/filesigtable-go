@@ -10,9 +10,10 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/semk/filesigtable-go/sigtable"
 )
@@ -24,6 +25,7 @@ func main() {
 	}
 	file := os.Args[1]
 
+	ext := strings.ToUpper(filepath.Ext(file))
 	f, err := os.OpenFile(file, os.O_RDONLY, 0666)
 	if err != nil {
 		fmt.Println(err)
@@ -31,16 +33,15 @@ func main() {
 	}
 	defer f.Close()
 
-	var headerBuf []byte
-	var validSigs []*sigtable.FileSignature
-	for _, s := range sigtable.FileSignatures {
-		headerBuf = make([]byte, len(s.Header))
-		_, err := f.ReadAt(headerBuf, s.HeaderOffset)
+	var validSigs []sigtable.FileSignature
+
+	for _, s := range sigtable.GetSignaturesByExtension(ext) {
+		valid, err := sigtable.ValidateSignature(s, f)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(3)
 		}
-		if bytes.Compare(headerBuf, s.Header) == 0 {
+		if valid {
 			validSigs = append(validSigs, s)
 		}
 	}
@@ -50,11 +51,31 @@ func main() {
 		for _, s := range validSigs {
 			fmt.Printf("Description:\t%s\n", s.Description)
 			fmt.Printf("Class:\t\t%s\n", s.Class)
-			fmt.Printf("Extension:\t%s\n\n", s.Extension)
+			fmt.Printf("Extensions:\t%s\n\n", strings.Join(s.Extensions, ", "))
 		}
 	} else {
-		fmt.Println("No matching signatures found.")
-		os.Exit(4)
+		fmt.Println("No matching signatures found by extension. Searching greedily!")
+		for _, s := range sigtable.GetAllSignatures() {
+			valid, err := sigtable.ValidateSignature(s, f)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(3)
+			}
+			if valid {
+				validSigs = append(validSigs, s)
+			}
+		}
+		if validSigs != nil {
+			fmt.Println("File signatures matched with the following types:\n")
+			for _, s := range validSigs {
+				fmt.Printf("Description:\t%s\n", s.Description)
+				fmt.Printf("Class:\t\t%s\n", s.Class)
+				fmt.Printf("Extensions:\t%s\n\n", strings.Join(s.Extensions, ", "))
+			}
+		} else {
+			fmt.Println("No matching signatures found.")
+			os.Exit(4)
+		}
 	}
 
 }

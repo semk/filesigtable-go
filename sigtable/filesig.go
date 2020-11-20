@@ -23,32 +23,44 @@ type FileSignature struct {
 	HeaderOffset int64
 	HeaderLength uint64
 	Trailer      []byte
-	Extension    string
+	Extensions   []string
 	Class        string
 }
 
+func (fs FileSignature) SigName() string {
+	specials := map[string]string{
+		" -|!:@,": "_",
+		".()":     "",
+		"+":       "P",
+	}
+
+	name := strings.ToUpper(fs.Description)
+	exts := strings.ToUpper(strings.Join(fs.Extensions, "_"))
+	for chars, rep := range specials {
+		for _, c := range chars {
+			name = strings.Replace(name, string(c), rep, -1)
+			exts = strings.Replace(exts, string(c), rep, -1)
+		}
+	}
+
+	sigName := fmt.Sprintf("SIG_%s", name)
+	if fs.Extensions != nil {
+		sigName = fmt.Sprintf("%s_%s", sigName, exts)
+	}
+
+	return sigName
+}
+
+func (fs FileSignature) ExtensionsGoString() string {
+	return fmt.Sprintf("%#v", fs.Extensions)
+}
+
 func (fs FileSignature) HeaderGoString() string {
-	if fs.Header == nil {
-		return "nil"
-	}
-	var hexBytes []string
-	for _, b := range fs.Header {
-		hexByte := fmt.Sprintf("0x%x", b)
-		hexBytes = append(hexBytes, hexByte)
-	}
-	return "[]byte{" + strings.Join(hexBytes, ", ") + "}"
+	return fmt.Sprintf("%#v", fs.Header)
 }
 
 func (fs FileSignature) TrailerGoString() string {
-	if fs.Trailer == nil {
-		return "nil"
-	}
-	var hexBytes []string
-	for _, b := range fs.Trailer {
-		hexByte := fmt.Sprintf("0x%x", b)
-		hexBytes = append(hexBytes, hexByte)
-	}
-	return "[]byte{" + strings.Join(hexBytes, ", ") + "}"
+	return fmt.Sprintf("%#v", fs.Trailer)
 }
 
 func convertHexStringToBytes(hexStr string) ([]byte, error) {
@@ -68,7 +80,7 @@ func convertHexStringToBytes(hexStr string) ([]byte, error) {
 }
 
 // NewFileSignature creates a new FileSignature object from string representation
-func NewFileSignature(desc, header, ext, class, offset, trailer string) (*FileSignature, error) {
+func NewFileSignature(desc, header, exts, class, offset, trailer string) (*FileSignature, error) {
 	var err error
 	var headerBytes []byte
 	if header != "(null)" {
@@ -91,10 +103,17 @@ func NewFileSignature(desc, header, ext, class, offset, trailer string) (*FileSi
 		return nil, err
 	}
 
+	var extList []string
+	if exts != "" && exts != "(none)" {
+		for _, e := range strings.Split(exts, "|") {
+			extList = append(extList, strings.ToUpper(e))
+		}
+	}
+
 	return &FileSignature{
 		Description:  desc,
 		Header:       headerBytes,
-		Extension:    ext,
+		Extensions:   extList,
 		Class:        class,
 		HeaderOffset: offsetUint64,
 		Trailer:      trailerBytes,
